@@ -45,8 +45,23 @@ database/credentials/**
 /config/master-password.txt
 /database/connection-string.txt
 
+# === Test-specific patterns for unit tests ===
+/to/ignore
+/somedir/toignore/**
+!/somedir/toignore/file-to-not-ignore.md
+**/bamboo-specs/**
+**/keycloak-realm-config/templates/**
+*-realm.json
+some.properties
+something.properties
+
 # === Allowed exceptions (negation patterns) ===
 !**/public/**
 !**/test-data/**
 !*.example.properties
 !*.template.env
+!*.local.json
+!*.local.jsonc
+!*.local.md
+!/.local/
+!**/target/**
