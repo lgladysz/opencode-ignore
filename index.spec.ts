@@ -450,3 +450,282 @@ describe("Real-world Scenarios", () => {
       .rejects.toThrow(/Access denied/)
   })
 })
+
+describe("Glob Tool Result Filtering", () => {
+  let plugin: any
+  let afterHook: any
+
+  beforeAll(async () => {
+    plugin = await createPlugin()
+    afterHook = plugin["tool.execute.after"]
+  })
+
+  test("filters blocked files from glob results", async () => {
+    const mockOutput = {
+      files: [
+        "index.ts",              // ALLOWED
+        "secrets.json",          // BLOCKED
+        "credentials.json",      // BLOCKED
+        "README.md",             // ALLOWED
+        ".env",                  // BLOCKED
+        "config.local.json"      // ALLOWED (negation)
+      ]
+    }
+
+    const filtered = await afterHook(
+      { tool: "glob", sessionID: "test", callID: "test" },
+      { args: { pattern: "**/*" }, output: mockOutput }
+    )
+
+    expect(filtered.files).toHaveLength(3)
+    expect(filtered.files).toContain("index.ts")
+    expect(filtered.files).toContain("README.md")
+    expect(filtered.files).toContain("config.local.json")
+    expect(filtered.files).not.toContain("secrets.json")
+    expect(filtered.files).not.toContain("credentials.json")
+    expect(filtered.files).not.toContain(".env")
+  })
+
+  test("filters certificate and key files", async () => {
+    const mockOutput = {
+      files: [
+        "server.crt",
+        "private.key",
+        "ca.pem",
+        "README.md"
+      ]
+    }
+
+    const filtered = await afterHook(
+      { tool: "glob", sessionID: "test", callID: "test" },
+      { args: { pattern: "**/*" }, output: mockOutput }
+    )
+
+    expect(filtered.files).toHaveLength(1)
+    expect(filtered.files).toContain("README.md")
+  })
+
+  test("returns empty array when all files blocked", async () => {
+    const mockOutput = {
+      files: [
+        "secrets.json",
+        "credentials.json",
+        ".env",
+        "private.key"
+      ]
+    }
+
+    const filtered = await afterHook(
+      { tool: "glob", sessionID: "test", callID: "test" },
+      { args: { pattern: "**/*" }, output: mockOutput }
+    )
+
+    expect(filtered.files).toHaveLength(0)
+    expect(filtered.files).toEqual([])
+  })
+
+  test("handles glob results with no files", async () => {
+    const mockOutput = { files: [] }
+
+    const filtered = await afterHook(
+      { tool: "glob", sessionID: "test", callID: "test" },
+      { args: { pattern: "**/*.xyz" }, output: mockOutput }
+    )
+
+    expect(filtered.files).toEqual([])
+  })
+
+  test("handles malformed glob results gracefully", async () => {
+    const mockOutput = { files: null }
+
+    const filtered = await afterHook(
+      { tool: "glob", sessionID: "test", callID: "test" },
+      { args: { pattern: "**/*" }, output: mockOutput }
+    )
+
+    expect(filtered).toEqual(mockOutput)
+  })
+
+  test("respects negation patterns", async () => {
+    const mockOutput = {
+      files: [
+        "config.local.json",      // ALLOWED (negation)
+        "settings.local.jsonc",   // ALLOWED (negation)
+        ".local/impl.md",         // ALLOWED (negation)
+        "secrets.json"            // BLOCKED
+      ]
+    }
+
+    const filtered = await afterHook(
+      { tool: "glob", sessionID: "test", callID: "test" },
+      { args: { pattern: "**/*" }, output: mockOutput }
+    )
+
+    expect(filtered.files).toHaveLength(3)
+    expect(filtered.files).toContain("config.local.json")
+    expect(filtered.files).toContain("settings.local.jsonc")
+    expect(filtered.files).toContain(".local/impl.md")
+  })
+
+  test("does not filter non-glob tools", async () => {
+    const mockOutput = {
+      files: ["secrets.json", "index.ts"]
+    }
+
+    const filtered = await afterHook(
+      { tool: "read", sessionID: "test", callID: "test" },
+      { args: {}, output: mockOutput }
+    )
+
+    // Should return unchanged for non-glob tools
+    expect(filtered).toEqual(mockOutput)
+  })
+})
+
+describe("Grep Tool Result Filtering", () => {
+  let plugin: any
+  let afterHook: any
+
+  beforeAll(async () => {
+    plugin = await createPlugin()
+    afterHook = plugin["tool.execute.after"]
+  })
+
+  test("filters blocked files from grep results", async () => {
+    const mockOutput = {
+      matches: [
+        { file: "index.ts", line: 10, column: 5, match: "export" },           // ALLOWED
+        { file: "secrets.json", line: 3, column: 10, match: "password" },     // BLOCKED
+        { file: "README.md", line: 1, column: 0, match: "# opencode" },       // ALLOWED
+        { file: ".env", line: 5, column: 0, match: "API_KEY=secret" }         // BLOCKED
+      ]
+    }
+
+    const filtered = await afterHook(
+      { tool: "grep", sessionID: "test", callID: "test" },
+      { args: { pattern: ".*" }, output: mockOutput }
+    )
+
+    expect(filtered.matches).toHaveLength(2)
+    expect(filtered.matches[0].file).toBe("index.ts")
+    expect(filtered.matches[1].file).toBe("README.md")
+  })
+
+  test("does not leak any info about blocked files", async () => {
+    const mockOutput = {
+      matches: [
+        { file: "credentials.json", line: 7, column: 15, match: "admin_password: secret123" },
+        { file: "private.key", line: 1, column: 0, match: "-----BEGIN PRIVATE KEY-----" },
+        { file: "index.ts", line: 50, column: 10, match: "const config" }
+      ]
+    }
+
+    const filtered = await afterHook(
+      { tool: "grep", sessionID: "test", callID: "test" },
+      { args: { pattern: ".*" }, output: mockOutput }
+    )
+
+    // Only allowed file should remain
+    expect(filtered.matches).toHaveLength(1)
+    expect(filtered.matches[0].file).toBe("index.ts")
+    
+    // Ensure no info from blocked files leaks
+    const resultStr = JSON.stringify(filtered)
+    expect(resultStr).not.toContain("credentials.json")
+    expect(resultStr).not.toContain("private.key")
+    expect(resultStr).not.toContain("secret123")
+    expect(resultStr).not.toContain("PRIVATE KEY")
+  })
+
+  test("returns empty matches when all blocked", async () => {
+    const mockOutput = {
+      matches: [
+        { file: "secrets.json", line: 1, match: "secret" },
+        { file: ".env", line: 2, match: "password" },
+        { file: "private.key", line: 5, match: "key data" }
+      ]
+    }
+
+    const filtered = await afterHook(
+      { tool: "grep", sessionID: "test", callID: "test" },
+      { args: { pattern: "secret" }, output: mockOutput }
+    )
+
+    expect(filtered.matches).toHaveLength(0)
+    expect(filtered.matches).toEqual([])
+  })
+
+  test("handles grep results with no matches", async () => {
+    const mockOutput = { matches: [] }
+
+    const filtered = await afterHook(
+      { tool: "grep", sessionID: "test", callID: "test" },
+      { args: { pattern: "nonexistent" }, output: mockOutput }
+    )
+
+    expect(filtered.matches).toEqual([])
+  })
+
+  test("handles malformed grep results gracefully", async () => {
+    const mockOutput = { matches: null }
+
+    const filtered = await afterHook(
+      { tool: "grep", sessionID: "test", callID: "test" },
+      { args: { pattern: "test" }, output: mockOutput }
+    )
+
+    expect(filtered).toEqual(mockOutput)
+  })
+
+  test("keeps matches without file info", async () => {
+    const mockOutput = {
+      matches: [
+        { file: "index.ts", line: 10, match: "export" },
+        { line: 5, match: "some match without file" },  // No file property
+        { file: "secrets.json", line: 3, match: "password" }
+      ]
+    }
+
+    const filtered = await afterHook(
+      { tool: "grep", sessionID: "test", callID: "test" },
+      { args: { pattern: ".*" }, output: mockOutput }
+    )
+
+    expect(filtered.matches).toHaveLength(2)
+    expect(filtered.matches[0].file).toBe("index.ts")
+    expect(filtered.matches[1]).not.toHaveProperty("file")
+  })
+
+  test("respects negation patterns in grep", async () => {
+    const mockOutput = {
+      matches: [
+        { file: "config.local.json", line: 1, match: "config" },    // ALLOWED (negation)
+        { file: ".local/notes.md", line: 5, match: "notes" },       // ALLOWED (negation)
+        { file: "secrets.json", line: 2, match: "secret" }          // BLOCKED
+      ]
+    }
+
+    const filtered = await afterHook(
+      { tool: "grep", sessionID: "test", callID: "test" },
+      { args: { pattern: ".*" }, output: mockOutput }
+    )
+
+    expect(filtered.matches).toHaveLength(2)
+    expect(filtered.matches[0].file).toBe("config.local.json")
+    expect(filtered.matches[1].file).toBe(".local/notes.md")
+  })
+
+  test("does not filter non-grep tools", async () => {
+    const mockOutput = {
+      matches: [{ file: "secrets.json", line: 1, match: "secret" }]
+    }
+
+    const filtered = await afterHook(
+      { tool: "write", sessionID: "test", callID: "test" },
+      { args: {}, output: mockOutput }
+    )
+
+    // Should return unchanged for non-grep tools
+    expect(filtered).toEqual(mockOutput)
+  })
+})
