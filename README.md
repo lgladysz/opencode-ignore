@@ -1,15 +1,216 @@
-# opencode-plugin-template
+# opencode-ignore
 
-To install dependencies:
+OpenCode plugin to restrict AI access to files and directories using `.ignore` patterns (gitignore-style).
+
+## Installation
 
 ```bash
+bun add opencode-ignore
+```
+
+## Usage
+
+Add to your OpenCode configuration (`~/.config/opencode/opencode.json`):
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": [
+    "opencode-ignore"
+  ]
+}
+```
+
+Create a `.ignore` file in your project root with patterns to block:
+
+```gitignore
+# Block specific directory
+/secrets/**
+
+# Block all certificate files
+*.crt
+*.key
+*.pem
+
+# Block environment files
+.env*
+
+# Allow exception with negation
+!config.local.json
+```
+
+## `.ignore` Format
+
+The `.ignore` file follows gitignore-style syntax powered by the [`ignore`](https://github.com/kaelzhang/node-ignore) package.
+
+### Pattern Types
+
+#### Absolute Paths
+Block specific paths from project root:
+```gitignore
+/to/ignore
+/somedir/toignore/**
+```
+
+#### Glob Patterns
+Block files matching patterns anywhere in project:
+```gitignore
+**/node_modules/**
+**/dist/**
+**/build/**
+**/.cache/**
+```
+
+#### Wildcards
+Block files by extension or name pattern:
+```gitignore
+*.crt              # All certificate files
+*.key              # All private keys
+*.pem              # All PEM files
+*-secret.json      # Files ending with "-secret.json"
+temp*.log          # Temp log files
+```
+
+#### Negation Patterns
+Allow exceptions to blocked patterns:
+```gitignore
+*.json              # Block all JSON files
+!*.local.json       # But allow *.local.json files
+
+**/target/**        # Block target directory
+!**/target/**       # Re-allow it (negation)
+```
+
+### Directory vs File Matching
+
+The `ignore` library automatically detects whether paths are files or directories:
+
+```gitignore
+foo      # Blocks file "foo" OR directory "foo/"
+foo/     # Only blocks directory "foo/"
+```
+
+**Important**: Pattern `**/node_modules/**` blocks files *inside* the directory, not the directory itself.
+
+## Example Patterns
+
+See `example/.ignore` for comprehensive examples:
+
+```gitignore
+# Block specific paths
+/secrets/**
+/private/**
+!/private/public-config.json
+
+# Block directories anywhere
+**/node_modules/**
+**/dist/**
+**/build/**
+**/.cache/**
+
+# Block sensitive files
+*-secret.json
+temp*.log
+*.crt
+*.key
+*.pem
+.env*
+.env
+*.env
+id_rsa
+id_ed25519
+secrets.json
+credentials.json
+api-keys.json
+
+# Allow build artifacts in specific cases (negation)
+!**/dist/public/**
+
+# Allow local development files
+!*.local.json
+!*.dev.json
+!config.development.json
+!/.local/
+```
+
+## Supported Tools
+
+The plugin protects the following OpenCode native tools:
+
+### File Operations
+- `read` - Reading files
+- `write` - Writing files
+- `edit` - Editing files
+
+### Search Operations
+- `glob` - File pattern matching
+- `grep` - Content search
+
+### List Operations
+- `list` - Directory listing
+
+**Note**: Project root (`.`) is always accessible to prevent blocking entire project.
+
+## How It Works
+
+1. Plugin loads `.ignore` file from project root on each tool execution
+2. Tool paths are normalized to relative paths from project root
+3. Paths are checked against ignore patterns using the `ignore` library
+4. If matched, tool execution is blocked with clear error message
+5. If `.ignore` missing or path not matched, access is allowed
+
+### Error Messages
+
+When a path is blocked:
+```
+Access denied: path/to/file blocked by ignore file. Do NOT try to read this. Access restricted.
+```
+
+## Path Normalization
+
+The plugin handles various path formats:
+
+- **Absolute paths**: Converted to relative from project root
+- **Relative paths**: Used directly
+- **Paths with `./`**: Prefix removed (ignore library requirement)
+- **Win32 backslashes**: Auto-converted to forward slashes
+- **Directory paths**: Trailing `/` added when needed
+
+## Testing
+
+Run tests with:
+```bash
+bun test
+```
+
+Tests cover:
+- Absolute path patterns
+- Glob patterns
+- Negation patterns
+- Wildcard patterns
+- Directory vs file matching
+- Path normalization edge cases
+- All supported native tools
+- Missing `.ignore` graceful degradation
+
+## Development
+
+```bash
+# Install dependencies
 bun install
+
+# Run tests
+bun test
+
+# Build (if needed)
+bun build index.ts
 ```
 
-To run:
+## License
 
-```bash
-bun run index.ts
-```
+MIT
 
-This project was created using `bun init` in bun v1.3.1. [Bun](https://bun.com) is a fast all-in-one JavaScript runtime.
+## Related
+
+- [`ignore`](https://github.com/kaelzhang/node-ignore) - The underlying pattern matching library
+- [OpenCode Plugin Documentation](https://opencode.ai/docs/plugins)
