@@ -104,3 +104,58 @@ bun --hot ./index.ts
 ```
 
 For more information, read the Bun API docs in `node_modules/bun-types/docs/**.md`.
+
+
+## IMPORTANT
+
+- Try to keep things in one function unless composable or reusable
+- DO NOT do unnecessary destructuring of variables
+- DO NOT use `else` statements unless necessary
+- DO NOT use `try`/`catch` if it can be avoided
+- AVOID `try`/`catch` where possible
+- AVOID `else` statements
+- AVOID using `any` type
+- AVOID `let` statements
+- Use as many bun apis as possible like Bun.file()
+
+## Tool Calling
+
+- ALWAYS USE PARALLEL TOOLS WHEN APPLICABLE. Here is an example illustrating how to execute 3 parallel file reads in this chat environnement:
+
+json
+{
+    "recipient_name": "multi_tool_use.parallel",
+    "parameters": {
+        "tool_uses": [
+            {
+                "recipient_name": "functions.read",
+                "parameters": {
+                    "filePath": "path/to/file.tsx"
+                }
+            },
+            {
+                "recipient_name": "functions.read",
+                "parameters": {
+                    "filePath": "path/to/file.ts"
+                }
+            },
+            {
+                "recipient_name": "functions.read",
+                "parameters": {
+                    "filePath": "path/to/file.md"
+                }
+            }
+        ]
+    }
+}
+
+
+## Commits
+
+Commits should follow the conventional commit format.
+Fetch for information: https://context7.com/websites/conventionalcommits/llms.txt?topic=Conventional+Commit+Examples&tokens=1000
+
+## ignore package
+
+Fetch https://context7.com/kaelzhang/node-ignore/llms.txt to get information how ignore package works.
+

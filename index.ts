@@ -1,8 +1,7 @@
 import type { Plugin } from "@opencode-ai/plugin"
 import ignore from "ignore"
 import { isPathValid } from "ignore"
-import fs from "fs"
-import path from "path"
+import { join, isAbsolute, relative } from "path"
 
 /**
  * Load ignore patterns from project root
@@ -10,21 +9,19 @@ import path from "path"
  * @param projectRoot - Absolute path to project root
  * @returns Ignore instance or null if no ignore file exists
  */
-function loadAiIgnore(projectRoot: string): ReturnType<typeof ignore> | null {
+async function loadAiIgnore(projectRoot: string): Promise<ReturnType<typeof ignore> | null> {
   const ignoreFiles = [".aiignore", ".ignore"]
   
-  // Try each ignore file in order
   for (const filename of ignoreFiles) {
-    const ignorePath = path.join(projectRoot, filename)
-    if (fs.existsSync(ignorePath)) {
-      const ig = ignore()
-      const content = fs.readFileSync(ignorePath, "utf-8")
-      ig.add(content)
-      return ig
+    const ignorePath = join(projectRoot, filename)
+    const file = Bun.file(ignorePath)
+    if (await file.exists()) {
+      const ignoreLib = ignore()
+      ignoreLib.add(await file.text())
+      return ignoreLib
     }
   }
   
-  // No ignore file found = allow all access (graceful degradation)
   return null
 }
 
@@ -35,43 +32,21 @@ function loadAiIgnore(projectRoot: string): ReturnType<typeof ignore> | null {
  * @param isDirectory - Whether the path represents a directory
  * @returns Normalized relative path
  */
-function normalizePath(
-  targetPath: string,
-  projectRoot: string,
-  isDirectory: boolean
-): string {
-  // 1. Convert to absolute first (if relative)
-  const absolutePath = path.isAbsolute(targetPath)
-    ? targetPath
-    : path.join(projectRoot, targetPath)
+function normalizePath(targetPath: string, projectRoot: string, isDirectory: boolean): string {
+  const absolutePath = isAbsolute(targetPath) ? targetPath : join(projectRoot, targetPath)
+  const relativePath = relative(projectRoot, absolutePath)
+  const resolvedPath = relativePath === "" ? "." : relativePath
+  const normalizedPath = resolvedPath.replace(/\\/g, "/")
+  const withoutPrefixPath = normalizedPath.startsWith("./") ? normalizedPath.slice(2) : normalizedPath
+  const withSlashPath = isDirectory && withoutPrefixPath !== "." && !withoutPrefixPath.endsWith("/")
+    ? withoutPrefixPath + "/"
+    : withoutPrefixPath
   
-  // 2. Make relative to project root
-  let relativePath = path.relative(projectRoot, absolutePath)
-  
-  // 3. Handle project root itself (relative returns empty string)
-  if (relativePath === "") {
-    relativePath = "."
+  if (!isPathValid(withSlashPath)) {
+    throw new Error(`Invalid path format: ${withSlashPath}`)
   }
   
-  // 4. Normalize separators (ignore handles Win32 automatically, but ensure forward slashes)
-  relativePath = relativePath.replace(/\\/g, "/")
-  
-  // 5. Remove ./ prefix if present (ignore library requirement)
-  if (relativePath.startsWith("./")) {
-    relativePath = relativePath.slice(2)
-  }
-  
-  // 6. Add trailing slash for directories (except for ".")
-  if (isDirectory && relativePath !== "." && !relativePath.endsWith("/")) {
-    relativePath += "/"
-  }
-  
-  // 7. Validate path format
-  if (!isPathValid(relativePath)) {
-    throw new Error(`Invalid path format: ${relativePath}`)
-  }
-  
-  return relativePath
+  return withSlashPath
 }
 
 /**
@@ -81,29 +56,14 @@ function normalizePath(
  * @param isDirectory - Whether the path represents a directory
  * @returns true if path is blocked, false otherwise
  */
-function isPathBlocked(
-  targetPath: string,
-  projectRoot: string,
-  isDirectory: boolean
-): boolean {
-  // Load .aiignore
-  const ig = loadAiIgnore(projectRoot)
+async function isPathBlocked(targetPath: string, projectRoot: string, isDirectory: boolean): Promise<boolean> {
+  const ignoreLib = await loadAiIgnore(projectRoot)
+  if (!ignoreLib) return false
   
-  // No .aiignore = allow all
-  if (!ig) {
-    return false
-  }
-  
-  // Normalize path
   const normalizedPath = normalizePath(targetPath, projectRoot, isDirectory)
-  
-  // Check if ignored
-  return ig.ignores(normalizedPath)
+  return ignoreLib.ignores(normalizedPath)
 }
 
-/**
- * Interface for path extraction result
- */
 interface PathInfo {
   path: string
   isDirectory: boolean
@@ -115,28 +75,13 @@ interface PathInfo {
  * @param args - Tool arguments
  * @returns PathInfo or null if tool doesn't require path checking
  */
-function extractPathFromTool(tool: string, args: any): PathInfo | null {
-  // Native file I/O tools - FILES
-  if (tool === "read") {
-    return args.filePath ? { path: args.filePath, isDirectory: false } : null
-  }
-  if (tool === "write") {
-    return args.filePath ? { path: args.filePath, isDirectory: false } : null
-  }
-  if (tool === "edit") {
-    return args.filePath ? { path: args.filePath, isDirectory: false } : null
-  }
-  
-  // Native search/list tools - DIRECTORIES
-  if (tool === "glob") {
-    return { path: args.path || ".", isDirectory: true }
-  }
-  if (tool === "grep") {
-    return { path: args.path || ".", isDirectory: true }
-  }
-  if (tool === "list") {
-    return { path: args.path || ".", isDirectory: true }
-  }
+function extractPathFromTool(tool: string, args: Record<string, unknown>): PathInfo | null {
+  if (tool === "read") return args.filePath ? { path: args.filePath as string, isDirectory: false } : null
+  if (tool === "write") return args.filePath ? { path: args.filePath as string, isDirectory: false } : null
+  if (tool === "edit") return args.filePath ? { path: args.filePath as string, isDirectory: false } : null
+  if (tool === "glob") return { path: (args.path as string) || ".", isDirectory: true }
+  if (tool === "grep") return { path: (args.path as string) || ".", isDirectory: true }
+  if (tool === "list") return { path: (args.path as string) || ".", isDirectory: true }
   
   return null
 }
@@ -146,21 +91,11 @@ export const OpenCodeIgnore: Plugin = async ({ project, client, $, directory, wo
   
   return {
     "tool.execute.before": async ({ tool }, { args }) => {
-      // Extract path from tool arguments
       const pathInfo = extractPathFromTool(tool, args)
+      if (!pathInfo) return
+      if (pathInfo.path === ".") return
       
-      // Skip tools that don't require path checking
-      if (!pathInfo) {
-        return
-      }
-      
-      // Skip checking project root itself (.) - can't block entire project
-      if (pathInfo.path === ".") {
-        return
-      }
-      
-      // Check if path is blocked
-      if (isPathBlocked(pathInfo.path, projectRoot, pathInfo.isDirectory)) {
+      if (await isPathBlocked(pathInfo.path, projectRoot, pathInfo.isDirectory)) {
         throw new Error(`Access denied: ${pathInfo.path} blocked by ignore file. Do NOT try to read this. Access restricted.`)
       }
     }
