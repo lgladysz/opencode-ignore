@@ -86,6 +86,97 @@ async function isPathBlocked(targetPath: string, projectRoot: string, isDirector
   return ignoreLib.ignores(normalizedPath)
 }
 
+/**
+ * Filter glob tool results to remove blocked files
+ * 
+ * @param result - Original glob result object
+ * @param ignoreLib - Ignore instance with loaded patterns
+ * @param projectRoot - Absolute path to project root
+ * @returns Filtered result with blocked files removed
+ */
+function filterGlobResults(
+  result: any,
+  ignoreLib: ReturnType<typeof ignore>,
+  projectRoot: string
+): any {
+  if (!result?.files || !Array.isArray(result.files)) return result
+  
+  const filteredFiles = result.files.filter((filePath: string) => {
+    try {
+      const normalized = normalizePath(filePath, projectRoot, false)
+      return !ignoreLib.ignores(normalized)
+    } catch {
+      // If normalization fails, filter out the file (safer approach)
+      return false
+    }
+  })
+  
+  return { ...result, files: filteredFiles }
+}
+
+/**
+ * Filter grep tool results to remove matches from blocked files
+ * 
+ * @param result - Original grep result object
+ * @param ignoreLib - Ignore instance with loaded patterns
+ * @param projectRoot - Absolute path to project root
+ * @returns Filtered result with matches from blocked files removed
+ */
+function filterGrepResults(
+  result: any,
+  ignoreLib: ReturnType<typeof ignore>,
+  projectRoot: string
+): any {
+  if (!result?.matches || !Array.isArray(result.matches)) return result
+  
+  const filteredMatches = result.matches.filter((match: any) => {
+    if (!match?.file) return true  // Keep matches without file info
+    
+    try {
+      const normalized = normalizePath(match.file, projectRoot, false)
+      return !ignoreLib.ignores(normalized)
+    } catch {
+      // If normalization fails, filter out the match (safer approach)
+      return false
+    }
+  })
+  
+  return { ...result, matches: filteredMatches }
+}
+
+/**
+ * Filter tool results to remove paths blocked by .ignore patterns
+ * Used in post-execution hook to prevent glob/grep from exposing sensitive files
+ *
+ * @param tool - Tool name (glob or grep)
+ * @param result - Original tool result
+ * @param projectRoot - Absolute path to project root
+ * @returns Filtered result with blocked paths removed
+ */
+async function filterResults(
+  tool: string,
+  result: any,
+  projectRoot: string
+): Promise<any> {
+  // Only filter glob and grep tools
+  if (tool !== "glob" && tool !== "grep") return result
+  
+  // Load ignore patterns
+  const ignoreLib = await loadIgnore(projectRoot)
+  if (!ignoreLib) return result  // No filtering if no .ignore
+  
+  // Filter based on tool type
+  if (tool === "glob") {
+    return filterGlobResults(result, ignoreLib, projectRoot)
+  }
+  
+  if (tool === "grep") {
+    return filterGrepResults(result, ignoreLib, projectRoot)
+  }
+  
+  return result
+}
+
 interface PathInfo {
   path: string
   isDirectory: boolean
@@ -167,6 +258,18 @@ export const OpenCodeIgnore: Plugin = async ({project, client, $, directory, wor
       if (await isPathBlocked(pathInfo.path, projectRoot, pathInfo.isDirectory)) {
         throw new Error(`Access denied: ${pathInfo.path} blocked by ignore file. Do NOT try to read this. Access restricted.`)
       }
+    },
+    
+    /**
+     * Hook that runs after tool execution
+     * Filters glob/grep results to remove blocked files
+     */
+    "tool.execute.after": async ({tool}, context) => {
+      // Only process glob and grep tools
+      if (tool !== "glob" && tool !== "grep") return context.output
+      
+      // Filter results to remove blocked files
+      return await filterResults(tool, context.output, projectRoot)
     }
   }
 }
