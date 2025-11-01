@@ -1,0 +1,41 @@
+{
+  "name": "opencode-plugin-template",
+  "version": "0.0.0",
+  "description": "Plugin for opencode",
+  "type": "module",
+  "license": "MIT",
+  "author": "Łukasz Gładysz",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lgladysz/opencode-plugin-template.git"
+  },
+  "keywords": [
+    "opencode",
+    "plugin"
+  ],
+  "homepage": "https://github.com/lgladysz/opencode-plugin-template#readme",
+  "bugs": {
+    "url": "https://github.com/lgladysz/opencode-plugin-template/issues"
+  },
+  "scripts": {
+    "build": "bun build ./index.ts --outdir ./dist",
+    "prepublishOnly": "bun build ./index.ts --outdir ./dist"
+  },
+  "module": "index.ts",
+  "files": [
+    "dist/",
+    "README.md",
+    "LICENSE"
+  ],
+  "devDependencies": {
+    "@types/bun": "^1.3.1",
+    "bun-types": "^1.3.1",
+    "@opencode-ai/plugin": "^1.0.7"
+  },
+  "peerDependencies": {
+    "typescript": "^5.9.3",
+    "@opencode-ai/plugin": "^1.0.7"
+  },
+  "dependencies": {
+  }
+}
