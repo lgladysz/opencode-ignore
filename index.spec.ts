@@ -2,8 +2,11 @@ import { test, expect, describe, beforeAll } from "bun:test"
 import { OpenCodeIgnore } from "./index"
 import path from "path"
 
+// Test data directory is the project root for all tests
+const TEST_PROJECT_ROOT = path.join(process.cwd(), "test-data")
+
 // Helper to create plugin instance
-async function createPlugin(projectRoot = process.cwd()) {
+async function createPlugin(projectRoot = TEST_PROJECT_ROOT) {
   return await OpenCodeIgnore({
     project: {} as any,
     client: {} as any,
@@ -270,7 +273,9 @@ describe("Pattern Types", () => {
     })
 
     test("allows other .properties files", async () => {
-      expect(callHook(hook, "read", { filePath: "application.properties" })).resolves.toBeUndefined()
+      // application.properties is also matched by app*.properties pattern
+      // Use a file that definitely doesn't match: sample.properties in test-data
+      expect(callHook(hook, "read", { filePath: "test-data/sample.properties" })).resolves.toBeUndefined()
     })
   })
 
@@ -314,13 +319,13 @@ describe("Path Normalization", () => {
 
   describe("absolute paths", () => {
     test("handles absolute paths correctly", async () => {
-      const absolutePath = path.join(process.cwd(), "secrets.json")
+      const absolutePath = path.join(TEST_PROJECT_ROOT, "secrets.json")
       expect(callHook(hook, "read", { filePath: absolutePath }))
         .rejects.toThrow(/Access denied/)
     })
 
     test("allows absolute path to allowed file", async () => {
-      const absolutePath = path.join(process.cwd(), "index.ts")
+      const absolutePath = path.join(TEST_PROJECT_ROOT, "README.md")
       expect(callHook(hook, "read", { filePath: absolutePath })).resolves.toBeUndefined()
     })
   })
