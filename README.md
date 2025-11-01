@@ -2,12 +2,6 @@
 
 OpenCode plugin to restrict AI access to files and directories using `.ignore` patterns (gitignore-style).
 
-## Installation
-
-```bash
-bun add opencode-ignore
-```
-
 ## Usage
 
 Add to your OpenCode configuration (`~/.config/opencode/opencode.json`):
