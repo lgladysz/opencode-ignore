@@ -1,0 +1,7 @@
+Production Database Connection Strings
+=======================================
+
+PRIMARY DATABASE:
+postgresql://db_admin_prod:DBAdm1n_Pr0d_P@ssw0rd_V3ry_S3cur3!@prod-db-primary.internal.company.com:5432/insurance
+
+WARNING: HIGHLY SENSITIVE - DO NOT SHARE

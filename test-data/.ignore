@@ -1,0 +1,52 @@
+# Test .ignore file for security plugin testing
+# This file defines patterns that should be blocked by the plugin
+
+# === Critical Security Files ===
+# Properties files with credentials
+app*.properties
+**/app*.properties
+*.server.properties
+**/*.server.properties
+
+# Environment files
+.env
+.env*
+*.env
+**/.env
+**/.env*
+**/*.env
+
+# Certificates and keys
+*.key
+**/*.key
+*.crt
+**/*.crt
+*.pem
+**/*.pem
+*.ca
+**/*.ca
+
+# Secrets
+secrets.json
+**/secrets.json
+credentials.json
+**/credentials.json
+id_rsa
+**/id_rsa
+
+# === Directory-based blocks ===
+/config/production/**
+/config/staging/**
+/certs/**
+/sensitive-data/**
+database/credentials/**
+
+# === Specific file blocks ===
+/config/master-password.txt
+/database/connection-string.txt
+
+# === Allowed exceptions (negation patterns) ===
+!**/public/**
+!**/test-data/**
+!*.example.properties
+!*.template.env
