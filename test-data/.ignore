@@ -57,7 +57,6 @@ something.properties
 
 # === Allowed exceptions (negation patterns) ===
 !**/public/**
-!**/test-data/**
 !*.example.properties
 !*.template.env
 !*.local.json
