@@ -22,7 +22,7 @@
   "scripts": {
     "build": "bun build ./index.ts --outdir ./dist",
     "prepublishOnly": "bun build ./index.ts --outdir ./dist",
-    "test": "bun test.ts"
+    "test": "bun test"
   },
   "module": "index.ts",
   "files": [
