@@ -28,12 +28,12 @@ describe("OpenCodeIgnore Plugin", () => {
     expect(typeof plugin["tool.execute.before"]).toBe("function")
   })
 
-  test("graceful degradation - missing all ignore files allows all", async () => {
-    const tempDir = "/tmp/test-no-aiignore-" + Date.now()
+  test("graceful degradation - missing ignore file allows all", async () => {
+    const tempDir = "/tmp/test-no-ignore-" + Date.now()
     const plugin = await createPlugin(tempDir)
     const hook = plugin["tool.execute.before"]!
     
-    // Should not throw even though no ignore files exist
+    // Should not throw even though no ignore file exists
     expect(callHook(hook, "read", { filePath: "secrets.json" })).resolves.toBeUndefined()
   })
 
@@ -48,9 +48,9 @@ describe("OpenCodeIgnore Plugin", () => {
   })
 })
 
-describe("Ignore File Fallback Priority", () => {
-  test("uses .aiignore when available", async () => {
-    // Current project has .aiignore, should block secrets.json
+describe("Ignore File Loading", () => {
+  test("uses .ignore when available", async () => {
+    // Current project has .ignore, should block secrets.json
     const plugin = await createPlugin()
     const hook = plugin["tool.execute.before"]!
     
@@ -58,10 +58,10 @@ describe("Ignore File Fallback Priority", () => {
       .rejects.toThrow(/Access denied/)
   })
 
-  test("falls back to .ignore if .aiignore missing", async () => {
+  test("loads .ignore file correctly", async () => {
     const tempDir = "/tmp/test-ignore-" + Date.now()
     
-    // Create temp dir with only .ignore
+    // Create temp dir with .ignore
     await Bun.write(tempDir + "/.ignore", "blocked.txt\n")
     
     const plugin = await createPlugin(tempDir)
@@ -70,23 +70,6 @@ describe("Ignore File Fallback Priority", () => {
     expect(callHook(hook, "read", { filePath: "blocked.txt" }))
       .rejects.toThrow(/Access denied/)
     expect(callHook(hook, "read", { filePath: "allowed.txt" }))
-      .resolves.toBeUndefined()
-  })
-
-  test("prioritizes .aiignore over .ignore when both exist", async () => {
-    const tempDir = "/tmp/test-priority-" + Date.now()
-    
-    // Create temp dir with both files, different patterns
-    await Bun.write(tempDir + "/.aiignore", "from-aiignore.txt\n")
-    await Bun.write(tempDir + "/.ignore", "from-ignore.txt\n")
-    
-    const plugin = await createPlugin(tempDir)
-    const hook = plugin["tool.execute.before"]!
-    
-    // Should use .aiignore rules
-    expect(callHook(hook, "read", { filePath: "from-aiignore.txt" }))
-      .rejects.toThrow(/Access denied/)
-    expect(callHook(hook, "read", { filePath: "from-ignore.txt" }))
       .resolves.toBeUndefined()
   })
 })
