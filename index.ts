@@ -45,20 +45,25 @@ function normalizePath(
   // 2. Make relative to project root
   let relativePath = path.relative(projectRoot, absolutePath)
   
-  // 3. Normalize separators (ignore handles Win32 automatically, but ensure forward slashes)
+  // 3. Handle project root itself (relative returns empty string)
+  if (relativePath === "") {
+    relativePath = "."
+  }
+  
+  // 4. Normalize separators (ignore handles Win32 automatically, but ensure forward slashes)
   relativePath = relativePath.replace(/\\/g, "/")
   
-  // 4. Remove ./ prefix if present (ignore library requirement)
+  // 5. Remove ./ prefix if present (ignore library requirement)
   if (relativePath.startsWith("./")) {
     relativePath = relativePath.slice(2)
   }
   
-  // 5. Add trailing slash for directories
-  if (isDirectory && !relativePath.endsWith("/")) {
+  // 6. Add trailing slash for directories (except for ".")
+  if (isDirectory && relativePath !== "." && !relativePath.endsWith("/")) {
     relativePath += "/"
   }
   
-  // 6. Validate path format
+  // 7. Validate path format
   if (!isPathValid(relativePath)) {
     throw new Error(`Invalid path format: ${relativePath}`)
   }
@@ -93,10 +98,68 @@ function isPathBlocked(
   return ig.ignores(normalizedPath)
 }
 
+/**
+ * Interface for path extraction result
+ */
+interface PathInfo {
+  path: string
+  isDirectory: boolean
+}
+
+/**
+ * Extract path and type from tool arguments
+ * @param tool - Tool name
+ * @param args - Tool arguments
+ * @returns PathInfo or null if tool doesn't require path checking
+ */
+function extractPathFromTool(tool: string, args: any): PathInfo | null {
+  // Native file I/O tools - FILES
+  if (tool === "read") {
+    return args.filePath ? { path: args.filePath, isDirectory: false } : null
+  }
+  if (tool === "write") {
+    return args.filePath ? { path: args.filePath, isDirectory: false } : null
+  }
+  if (tool === "edit") {
+    return args.filePath ? { path: args.filePath, isDirectory: false } : null
+  }
+  
+  // Native search/list tools - DIRECTORIES
+  if (tool === "glob") {
+    return { path: args.path || ".", isDirectory: true }
+  }
+  if (tool === "grep") {
+    return { path: args.path || ".", isDirectory: true }
+  }
+  if (tool === "list") {
+    return { path: args.path || ".", isDirectory: true }
+  }
+  
+  return null
+}
+
 export const OpenCodeIgnore: Plugin = async ({ project, client, $, directory, worktree }) => {
   const projectRoot = worktree || directory
   
   return {
-    // Phase 3: Native tools protection will be implemented here
+    "tool.execute.before": async ({ tool }, { args }) => {
+      // Extract path from tool arguments
+      const pathInfo = extractPathFromTool(tool, args)
+      
+      // Skip tools that don't require path checking
+      if (!pathInfo) {
+        return
+      }
+      
+      // Skip checking project root itself (.) - can't block entire project
+      if (pathInfo.path === ".") {
+        return
+      }
+      
+      // Check if path is blocked
+      if (isPathBlocked(pathInfo.path, projectRoot, pathInfo.isDirectory)) {
+        throw new Error(`Access denied: ${pathInfo.path} blocked by .aiignore. Do NOT try to read this. Access restricted.`)
+      }
+    }
   }
 }
