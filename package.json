@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "opencode-ignore",
-  "version": "1.0.3",
+  "version": "1.0.5",
   "description": "Ignore plugin for OpenCode",
   "type": "module",
   "license": "MIT",
@@ -20,11 +20,19 @@
     "url": "https://github.com/lgladysz/opencode-ignore/issues"
   },
   "scripts": {
-    "build": "bun build ./index.ts --outdir ./dist",
-    "prepublishOnly": "bun build ./index.ts --outdir ./dist",
+    "build": "bun build ./index.ts --outdir ./dist --target node",
+    "prepublishOnly": "bun run build",
     "test": "bun test"
   },
-  "module": "index.ts",
+  "module": "./dist/index.js",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "require": "./dist/index.js"
+    }
+  },
   "files": [
     "dist/",
     "README.md",
