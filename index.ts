@@ -5,21 +5,17 @@ import { join, isAbsolute, relative } from "path"
 
 /**
  * Load ignore patterns from project root
- * Tries .aiignore, .ignore in order
+ * Uses .ignore file
  * @param projectRoot - Absolute path to project root
  * @returns Ignore instance or null if no ignore file exists
  */
-async function loadAiIgnore(projectRoot: string): Promise<ReturnType<typeof ignore> | null> {
-  const ignoreFiles = [".aiignore", ".ignore"]
-  
-  for (const filename of ignoreFiles) {
-    const ignorePath = join(projectRoot, filename)
-    const file = Bun.file(ignorePath)
-    if (await file.exists()) {
-      const ignoreLib = ignore()
-      ignoreLib.add(await file.text())
-      return ignoreLib
-    }
+async function loadIgnore(projectRoot: string): Promise<ReturnType<typeof ignore> | null> {
+  const ignorePath = join(projectRoot, ".ignore")
+  const file = Bun.file(ignorePath)
+  if (await file.exists()) {
+    const ignoreLib = ignore()
+    ignoreLib.add(await file.text())
+    return ignoreLib
   }
   
   return null
@@ -50,14 +46,14 @@ function normalizePath(targetPath: string, projectRoot: string, isDirectory: boo
 }
 
 /**
- * Check if a path should be blocked by .aiignore
+ * Check if a path should be blocked by .ignore
  * @param targetPath - Path to check
  * @param projectRoot - Absolute path to project root
  * @param isDirectory - Whether the path represents a directory
  * @returns true if path is blocked, false otherwise
  */
 async function isPathBlocked(targetPath: string, projectRoot: string, isDirectory: boolean): Promise<boolean> {
-  const ignoreLib = await loadAiIgnore(projectRoot)
+  const ignoreLib = await loadIgnore(projectRoot)
   if (!ignoreLib) return false
   
   const normalizedPath = normalizePath(targetPath, projectRoot, isDirectory)
