@@ -5,24 +5,27 @@ import fs from "fs"
 import path from "path"
 
 /**
- * Load .aiignore patterns from project root
+ * Load ignore patterns from project root
+ * Tries .aiignore, .ignore in order
  * @param projectRoot - Absolute path to project root
- * @returns Ignore instance or null if .aiignore doesn't exist
+ * @returns Ignore instance or null if no ignore file exists
  */
 function loadAiIgnore(projectRoot: string): ReturnType<typeof ignore> | null {
-  const aiignorePath = path.join(projectRoot, ".aiignore")
+  const ignoreFiles = [".aiignore", ".ignore"]
   
-  // Missing .aiignore = allow all access (graceful degradation)
-  if (!fs.existsSync(aiignorePath)) {
-    return null
+  // Try each ignore file in order
+  for (const filename of ignoreFiles) {
+    const ignorePath = path.join(projectRoot, filename)
+    if (fs.existsSync(ignorePath)) {
+      const ig = ignore()
+      const content = fs.readFileSync(ignorePath, "utf-8")
+      ig.add(content)
+      return ig
+    }
   }
   
-  // Load and parse patterns
-  const ig = ignore()
-  const content = fs.readFileSync(aiignorePath, "utf-8")
-  ig.add(content)
-  
-  return ig
+  // No ignore file found = allow all access (graceful degradation)
+  return null
 }
 
 /**
@@ -158,7 +161,7 @@ export const OpenCodeIgnore: Plugin = async ({ project, client, $, directory, wo
       
       // Check if path is blocked
       if (isPathBlocked(pathInfo.path, projectRoot, pathInfo.isDirectory)) {
-        throw new Error(`Access denied: ${pathInfo.path} blocked by .aiignore. Do NOT try to read this. Access restricted.`)
+        throw new Error(`Access denied: ${pathInfo.path} blocked by ignore file. Do NOT try to read this. Access restricted.`)
       }
     }
   }
